@@ -698,6 +698,7 @@ int main(int argc, char* argv[])
     fclose(source);
 
     return 0;
+    int a=10;
 }
 
 
