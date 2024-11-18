@@ -1,4 +1,7 @@
-﻿#define _CRT_SECURE_NO_WARNINGS
+﻿// ConsoleApplication34.cpp : 此文件包含 "main" 函数。程序执行将在此处开始并结束。
+//
+
+#define _CRT_SECURE_NO_WARNINGS
 /****************************************************/
 /* File: globals.h                                  */
 /* Global types and vars for TINY compiler          */
@@ -24,18 +27,20 @@
 #endif
 
 /* MAXRESERVED = the number of reserved words */
-#define MAXRESERVED 8
+#define MAXRESERVED 23
 
 typedef enum
 /* book-keeping tokens */
 {
-    ENDFILE, ERROR,
+    ENDFILE, ERROR,STR,
     /* reserved words */
     IF, THEN, ELSE, END, REPEAT, UNTIL, READ, WRITE,
+    TRUE1,FALSE1,OR,AND,NOT,INT,BOOL,STRING,FLOAT,DOUBLE,DO,WHILE,INCLUDE,BREAK,CONTINUE,
     /* multicharacter tokens */
     ID, NUM,
     /* special symbols */
-    ASSIGN, EQ, LT, PLUS, MINUS, TIMES, OVER, LPAREN, RPAREN, SEMI
+    ASSIGN, EQ, LT, PLUS, MINUS, TIMES, OVER, LPAREN, RPAREN, SEMI,
+    GT,LE,GE,COMMA,UPDOX,PERCENT,DOUBLETIMES
 } TokenType;
 
 extern FILE* source; /* source code text file */
@@ -161,6 +166,21 @@ void printToken(TokenType token, const char* tokenString)
 {
     switch (token)
     {
+    case TRUE1:
+    case FALSE1:
+    case OR:
+    case AND:
+    case NOT:
+    case INT:
+    case BOOL:
+    case STRING:
+    case FLOAT:
+    case DOUBLE:
+    case DO:
+    case WHILE:
+    case INCLUDE:
+    case BREAK:
+    case CONTINUE:
     case IF:
     case THEN:
     case ELSE:
@@ -183,6 +203,13 @@ void printToken(TokenType token, const char* tokenString)
     case TIMES: fprintf(listing, "*\n"); break;
     case OVER: fprintf(listing, "/\n"); break;
     case ENDFILE: fprintf(listing, "EOF\n"); break;
+    case GT: fprintf(listing, "SYM: >\n"); break;
+    case LE: fprintf(listing, "SYM: <=\n"); break;
+    case GE: fprintf(listing, "SYM: >=\n"); break;
+    case COMMA: fprintf(listing, "SYM: ,\n"); break;
+    case UPDOX: fprintf(listing, "SYM: '\n"); break;
+    case PERCENT: fprintf(listing, "SYM: %\n"); break;
+    case DOUBLETIMES: fprintf(listing, "SYM: **\n"); break;
     case NUM:
         fprintf(listing,
             "NUM, val= %s\n", tokenString);
@@ -194,6 +221,9 @@ void printToken(TokenType token, const char* tokenString)
     case ERROR:
         fprintf(listing,
             "ERROR: %s\n", tokenString);
+        break;
+    case STR:
+        fprintf(listing, "STR,cak=%s\n", tokenString);
         break;
     default: /* should never happen */
         fprintf(listing, "Unknown token: %d\n", token);
@@ -317,6 +347,7 @@ void printTree(TreeNode* tree)
             case IdK:
                 fprintf(listing, "Id: %s\n", tree->attr.name);
                 break;
+
             default:
                 fprintf(listing, "Unknown ExpNode kind\n");
                 break;
@@ -333,7 +364,7 @@ void printTree(TreeNode* tree)
 /* states in scanner DFA */
 typedef enum
 {
-    START, INASSIGN, INCOMMENT, INNUM, INID, DONE
+    START, INASSIGN, INCOMMENT, INNUM, INID, DONE,INLT,INGT,INUPDOX,INTIMES
 }
 StateType;
 
@@ -389,7 +420,11 @@ static struct
 } reservedWords[MAXRESERVED]
 = { {"if",IF},{"then",THEN},{"else",ELSE},{"end",END},
    {"repeat",REPEAT},{"until",UNTIL},{"read",READ},
-   {"write",WRITE} };
+   {"write",WRITE},{"true",TRUE1},{"false",FALSE1 },{"or",OR},{"ans",AND},
+    {"not",NOT},{"int",INT},{"bool",BOOL},{"string",STRING},{"float",FLOAT},
+    {"double",DOUBLE},{"do",DO},{"while",WHILE},{"include",INCLUDE},{"break",BREAK},
+    {"continue",CONTINUE}
+}; 
 
 /* lookup an identifier to see if it is a reserved word */
 /* uses linear search */
@@ -437,6 +472,20 @@ TokenType getToken(void)
                 save = FALSE;
                 state = INCOMMENT;
             }
+            else if (c == '<') {
+                state = INLT;
+            }
+            else if (c == '>') {
+                state = INGT;
+            }
+            else if (c == '*') {
+                state = INTIMES;
+            }
+            else if (c == '\'') {
+                save = FALSE;
+                state = INUPDOX;
+            }
+
             else
             {
                 state = DONE;
@@ -473,6 +522,10 @@ TokenType getToken(void)
                 case ';':
                     currentToken = SEMI;
                     break;
+                case',':
+                    currentToken = COMMA;
+                case'%':
+                    currentToken = PERCENT;
                 default:
                     currentToken = ERROR;
                     break;
@@ -481,13 +534,24 @@ TokenType getToken(void)
             break;
         case INCOMMENT:
             save = FALSE;
-            if (c == EOF)
-            {
+            if (c == EOF) { // 没有遇到}就结束
+                save = FALSE;
                 state = DONE;
-                currentToken = ENDFILE;
+                currentToken = ERROR;
+                strcpy(tokenString, "comment missing \"} \"!"); // 出错消息
+                tokenStringIndex += 20;
             }
-            else if (c == '}')
+            else if (c == '{') { // 嵌套
+                save = FALSE;
+                state = DONE;
+                currentToken = ERROR;
+                strcpy(tokenString, "comment cannot be nested"); // 出错消息
+                tokenStringIndex += 30;
+            }
+            else if (c == '}') {
                 state = START;
+                break;
+            }
             break;
         case INASSIGN:
             state = DONE;
@@ -498,6 +562,8 @@ TokenType getToken(void)
                 ungetNextChar();
                 save = FALSE;
                 currentToken = ERROR;
+                strcpy(tokenString, "missing \" = \" after \"): \"!");
+                tokenStringIndex += 25;
             }
             break;
         case INNUM:
@@ -510,7 +576,7 @@ TokenType getToken(void)
             }
             break;
         case INID:
-            if (!isalpha(c))
+            if (!isalpha(c)&&!isdigit(c))
             { /* backup in the input */
                 ungetNextChar();
                 save = FALSE;
@@ -518,11 +584,66 @@ TokenType getToken(void)
                 currentToken = ID;
             }
             break;
+        case INLT: // 处理 '<'
+            if (c == '=') { // 匹配 '<='
+                state = DONE;
+                currentToken = LE;
+            }
+            else { // 仅为 '<'，回退字符
+                ungetNextChar();
+                save = FALSE;
+                state = DONE;
+                currentToken = LT;
+            }
+            break;
+
+        case INGT: // 处理 '>'
+            if (c == '=') { // 匹配 '>='
+                state = DONE;
+                currentToken = GE;
+            }
+            else { // 仅为 '>'，回退字符
+                ungetNextChar();
+                save = FALSE;
+                state = DONE;
+                currentToken = GT;
+            }
+            break;
+
+        case INTIMES: // 处理 '*'
+            if (c == '*') { // 匹配 '**'
+                state = DONE;
+                currentToken = DOUBLETIMES;
+            }
+            else { // 仅为 '*'，回退字符
+                ungetNextChar();
+                save = FALSE;
+                state = DONE;
+                currentToken = TIMES;
+            }
+            break;
+        case INUPDOX:
+            if (c == '\'') { // 读到下一个上引号
+                save = FALSE;
+                state = DONE;
+                currentToken = STR;
+            }
+            else if (!(linepos < bufsize)) { // 注释的右部括号丢失
+                save = FALSE;
+                state = DONE;
+                currentToken = ERROR;
+                strcpy(tokenString, "STR missing '\"!"); // 出错消息
+                tokenStringIndex += 20;
+            }
+            break;
+
         case DONE:
-        default: /* should never happen */
-            fprintf(listing, "Scanner Bug: state= %d\n", state);
-            state = DONE;
+        default:
             currentToken = ERROR;
+            strcpy(tokenString, "Unknown token "); // 出错消息
+            tokenString[14] = (char)c; // 将未识别的字符添加到错误消息中
+            tokenString[15] = '\0'; // 确保字符串以空字符结尾
+            tokenStringIndex += 17; // 更新tokenStringIndex，这里可能是一个错误，应该是16
             break;
         }
         if ((save) && (tokenStringIndex <= MAXTOKENLEN))
@@ -568,7 +689,7 @@ int Error = FALSE;
 
 int main(int argc, char* argv[])
 {
-    source = fopen("C:\\Users\\19803\\Desktop\\tiny.txt", "r");   ////stdin;
+    source = fopen("C:\\Users\\19803\\Desktop\\tiny+2.txt", "r");   ////stdin;
 
     listing = stdout; /* send listing to screen */
 
