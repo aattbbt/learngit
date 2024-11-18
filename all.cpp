@@ -698,7 +698,11 @@ int main(int argc, char* argv[])
     fclose(source);
 
     return 0;
-    int a=30;
+<<<<<<< HEAD
+    int a=20;
+=======
+    int a=20;
+>>>>>>> feature1
 }
 
 
